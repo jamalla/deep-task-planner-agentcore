@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task Breakdown Coach · AgentCore</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #667085;
+    --line: #e4e7ec; --accent: #2f6fed; --accent-soft: #e8efff;
+    --user: #2f6fed; --user-text: #ffffff; --ok: #12805c; --err: #c4320a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1218; --panel: #171b23; --text: #e7eaf0; --muted: #98a2b3;
+      --line: #2a303c; --accent: #6d9bff; --accent-soft: #1c2740;
+      --user: #3b6fe0; --user-text: #ffffff; --ok: #3ccb8f; --err: #ff8a65;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .app { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid;
+         grid-template-columns: 1fr 280px; gap: 16px; min-height: 100vh; }
+  @media (max-width: 860px) { .app { grid-template-columns: 1fr; } aside { order: -1; } }
+  header { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  header h1 { font-size: 20px; margin: 0; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  header .spacer { flex: 1; }
+  input, textarea, button { font: inherit; color: inherit; }
+  .code { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
+  .code input { width: 180px; padding: 6px 8px; border: 1px solid var(--line);
+                border-radius: 8px; background: var(--panel); }
+  button { cursor: pointer; border: 1px solid var(--line); background: var(--panel);
+           padding: 7px 12px; border-radius: 8px; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  main { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+         display: flex; flex-direction: column; min-height: 70vh; overflow: hidden; }
+  #log { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+  .msg { max-width: 92%; padding: 10px 14px; border-radius: 12px; overflow-wrap: anywhere; }
+  .msg.user { align-self: flex-end; background: var(--user); color: var(--user-text);
+              border-bottom-right-radius: 4px; white-space: pre-wrap; }
+  .msg.bot { align-self: flex-start; background: var(--bg); border: 1px solid var(--line);
+             border-bottom-left-radius: 4px; }
+  .msg.err { border-color: var(--err); color: var(--err); }
+  .msg h2 { font-size: 16px; margin: 14px 0 6px; } .msg h2:first-child { margin-top: 0; }
+  .msg h3 { font-size: 14px; margin: 10px 0 4px; color: var(--accent); }
+  .msg ul, .msg ol { margin: 4px 0; padding-left: 22px; }
+  .msg p { margin: 6px 0; }
+  .msg code { background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  .tbl { overflow-x: auto; }
+  .msg table { border-collapse: collapse; font-size: 13px; margin: 6px 0; }
+  .msg th, .msg td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; }
+  .meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .empty { margin: auto; text-align: center; color: var(--muted); max-width: 520px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 12px; }
+  .chips button { font-size: 13px; border-radius: 999px; }
+  form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line); }
+  textarea { flex: 1; resize: none; min-height: 46px; max-height: 160px; padding: 10px 12px;
+             border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+  aside { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+          padding: 14px; align-self: start; }
+  aside h2 { font-size: 14px; margin: 0 0 4px; }
+  aside p { font-size: 12px; color: var(--muted); margin: 0 0 10px; }
+  #todos { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+  #todos li { font-size: 13px; display: flex; gap: 8px; }
+  #todos .s { flex: none; width: 18px; text-align: center; }
+  .done { color: var(--ok); }
+  .thinking { color: var(--muted); font-style: italic; }
+  #sess { font-family: ui-monospace, monospace; font-size: 11px; overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <h1>Task Breakdown Coach</h1>
+      <div class="sub">LangChain deep agent hosted on <strong>Amazon Bedrock AgentCore Runtime</strong>. Chat memory lives in the session's microVM.</div>
+    </div>
+    <div class="spacer"></div>
+    <label class="code">Access code <input id="code" type="password" autocomplete="off" placeholder="from deploy_ui.sh"></label>
+    <button id="reset" type="button">New chat</button>
+  </header>
+
+  <main>
+    <div id="log">
+      <div class="empty" id="empty">
+        <p><strong>Describe a task or goal.</strong> I'll plan it, have a reviewer check the plan, and schedule it.</p>
+        <div class="chips">
+          <button type="button">Launch a small online bakery in 2 months</button>
+          <button type="button">Prepare for the AWS Solutions Architect exam, 1 h a day</button>
+          <button type="button">Move to a new apartment by the end of next month</button>
+        </div>
+      </div>
+    </div>
+    <form id="form">
+      <textarea id="input" placeholder="e.g. Organise a team offsite for 20 people in 6 weeks" required></textarea>
+      <button class="primary" id="send" type="submit">Send</button>
+    </form>
+  </main>
+
+  <aside>
+    <h2>AgentCore session</h2>
+    <p id="sess">-</p>
+    <h2>Agent's own plan</h2>
+    <p>The to-do list the deep agent wrote for itself (write_todos) on the last turn.</p>
+    <ul id="todos"><li class="thinking">Nothing yet</li></ul>
+  </aside>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var KEY = "dtpac.history", CODE = "dtpac.code", SID = "dtpac.session";
+  var log = document.getElementById("log"), form = document.getElementById("form");
+  var input = document.getElementById("input"), send = document.getElementById("send");
+  var codeEl = document.getElementById("code"), todosEl = document.getElementById("todos");
+  var history = [], sessionId = "";
+  function newSession() {
+    var a = new Uint8Array(24); crypto.getRandomValues(a);
+    return "dtp-" + Array.from(a, function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+  }
+  function showSession(turns) {
+    document.getElementById("sess").textContent = sessionId + (turns ? "  \u00B7 turns remembered by the agent: " + turns : "");
+  }
+
+  function load(k, d) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
+  function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+
+  function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function inline(s) {
+    return esc(s).replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>");
+  }
+  // Small, safe Markdown renderer: headings, lists, tables, paragraphs.
+  function md(src) {
+    var lines = src.replace(/\r/g, "").split("\n"), out = [], i = 0;
+    while (i < lines.length) {
+      var l = lines[i];
+      if (/^\s*\|.*\|\s*$/.test(l)) {
+        var rows = [];
+        while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { rows.push(lines[i]); i++; }
+        var cells = function (r) { return r.trim().replace(/^\||\|$/g, "").split("|").map(function (c) { return c.trim(); }); };
+        var body = rows.filter(function (r) { return !/^\s*\|[\s:|-]+\|\s*$/.test(r); });
+        var h = "<div class=tbl><table><tr>" + cells(body[0]).map(function (c) { return "<th>" + inline(c) + "</th>"; }).join("") + "</tr>";
+        body.slice(1).forEach(function (r) { h += "<tr>" + cells(r).map(function (c) { return "<td>" + inline(c) + "</td>"; }).join("") + "</tr>"; });
+        out.push(h + "</table></div>"); continue;
+      }
+      var m;
+      if ((m = /^(#{1,4})\s+(.*)$/.exec(l))) { var lv = Math.min(m[1].length + 1, 3); out.push("<h" + lv + ">" + inline(m[2]) + "</h" + lv + ">"); i++; continue; }
+      if (/^\s*([-*]|\d+\.)\s+/.test(l)) {
+        var ordered = /^\s*\d+\./.test(l), items = [];
+        while (i < lines.length && /^\s*([-*]|\d+\.)\s+/.test(lines[i])) { items.push(lines[i].replace(/^\s*([-*]|\d+\.)\s+/, "")); i++; }
+        var tag = ordered ? "ol" : "ul";
+        out.push("<" + tag + ">" + items.map(function (t) { return "<li>" + inline(t) + "</li>"; }).join("") + "</" + tag + ">"); continue;
+      }
+      if (!l.trim()) { i++; continue; }
+      var para = [];
+      while (i < lines.length && lines[i].trim() && !/^(#{1,4}\s|\s*([-*]|\d+\.)\s|\s*\|)/.test(lines[i])) { para.push(lines[i]); i++; }
+      out.push("<p>" + inline(para.join(" ")) + "</p>");
+    }
+    return out.join("");
+  }
+
+  function bubble(role, content, extra) {
+    var e = document.getElementById("empty"); if (e) e.remove();
+    var d = document.createElement("div");
+    d.className = "msg " + (role === "user" ? "user" : "bot") + (extra || "");
+    if (role === "user") d.textContent = content; else d.innerHTML = md(content);
+    log.appendChild(d); log.scrollTop = log.scrollHeight; return d;
+  }
+  function renderTodos(todos) {
+    todosEl.innerHTML = "";
+    if (!todos || !todos.length) { todosEl.innerHTML = '<li class="thinking">No to-dos on this turn</li>'; return; }
+    todos.forEach(function (t) {
+      var li = document.createElement("li"), s = document.createElement("span"), c = document.createElement("span");
+      s.className = "s" + (t.status === "completed" ? " done" : "");
+      s.textContent = t.status === "completed" ? "\u2713" : t.status === "in_progress" ? "\u25B6" : "\u25CB";
+      c.textContent = t.content; li.appendChild(s); li.appendChild(c); todosEl.appendChild(li);
+    });
+  }
+
+  async function ask(text) {
+    var code = codeEl.value.trim();
+    if (!code) { codeEl.focus(); bubble("bot", "Please enter the access code (top right) first.", " err"); return; }
+    save(CODE, code);
+    history.push({ role: "user", content: text }); save(KEY, history);
+    bubble("user", text);
+    send.disabled = true; input.disabled = true;
+    var wait = bubble("bot", ""), t0 = Date.now();
+    var tick = setInterval(function () {
+      wait.innerHTML = '<span class="thinking">AgentCore is planning, reviewing and scheduling\u2026 ' + Math.round((Date.now() - t0) / 1000) + "s</span>";
+    }, 500);
+    try {
+      var res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-access-code": code },
+        body: JSON.stringify({ prompt: text, session_id: sessionId })  // only the new message: AgentCore keeps the history
+      });
+      var data = await res.json().catch(function () { return { error: "Bad response (" + res.status + ")" }; });
+      clearInterval(tick); wait.remove();
+      if (!res.ok) { history.pop(); save(KEY, history); bubble("bot", "**Error:** " + (data.error || res.status), " err"); return; }
+      history.push({ role: "assistant", content: data.reply }); save(KEY, history);
+      var b = bubble("bot", data.reply);
+      var meta = document.createElement("div"); meta.className = "meta";
+      meta.textContent = "Took " + Math.round((Date.now() - t0) / 1000) + "s (agent " + ((data.timings || {}).total_s || "?") + "s) \u00B7 turn " + (data.turns || "?") + " in this AgentCore session \u00B7 tools: " + (data.tools_used || []).join(", ");
+      b.appendChild(meta); renderTodos(data.todos); showSession(data.turns);
+    } catch (e) {
+      clearInterval(tick); wait.remove(); history.pop(); save(KEY, history);
+      bubble("bot", "**Network error:** " + e.message, " err");
+    } finally { send.disabled = false; input.disabled = false; input.focus(); }
+  }
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault(); var t = input.value.trim(); if (!t) return; input.value = ""; ask(t);
+  });
+  input.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
+  });
+  document.querySelectorAll(".chips button").forEach(function (b) {
+    b.addEventListener("click", function () { ask(b.textContent); });
+  });
+  document.getElementById("reset").addEventListener("click", function () {
+    var code = codeEl.value.trim(), old = sessionId;
+    history = []; save(KEY, history); save(SID, newSession());
+    if (code) fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json", "x-access-code": code },
+      body: JSON.stringify({ reset: true, session_id: old }) }).catch(function () {});
+    setTimeout(function () { location.reload(); }, 300);
+  });
+
+  codeEl.value = load(CODE, "");
+  sessionId = load(SID, "") || newSession(); save(SID, sessionId); showSession(0);
+  history = load(KEY, []);
+  history.forEach(function (m) { bubble(m.role, m.content); });
+})();
+</script>
+</body>
+</html>
