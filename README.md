@@ -33,7 +33,8 @@ deep agent (app/agent.py) ──▶ OpenAI
 | `main.py` | AgentCore entrypoint: `@app.entrypoint` calls `run_chat` and keeps history per `context.session_id` |
 | `app/agent.py`, `app/tools.py` | The same deep agent and tools as the Lambda project |
 | `build.sh` | Builds the arm64 direct-code-deploy zip and uploads it to S3 |
-| `tests/` | 14 pytest tests (no OpenAI calls) |
+| `ui/` | Chat UI: `index.html` + a small Lambda proxy (`handler.py`) that calls `invoke_agent_runtime`, and `deploy_ui.sh` |
+| `tests/` | 17 pytest tests (no OpenAI or AWS calls) |
 
 ## Lab (console)
 
@@ -56,8 +57,13 @@ deep agent (app/agent.py) ──▶ OpenAI
    {"prompt": "Make it weekends only, 5 hours a day"}
    ```
    Send `{"reset": true}` to forget the session's chat.
-4. **Observe it.** The console has a CloudWatch log link per runtime, and the response includes `timings`.
-5. **Clean up.** Delete the agent runtime and its endpoint in the console, then the S3 bucket and the execution role.
+4. **Chat UI.** In CloudShell, run `bash ui/deploy_ui.sh`. It prints a chat page URL and an access code. The page sends only the new message plus a session id, and AgentCore keeps the history:
+   ```
+   browser --{prompt, session_id}--> Lambda (ui/handler.py, IAM role: InvokeAgentRuntime on this runtime only)
+           --invoke_agent_runtime(runtimeSessionId)--> AgentCore microVM for that session
+   ```
+5. **Observe it.** The console has a CloudWatch log link per runtime, and the response includes `timings`.
+6. **Clean up.** Delete the agent runtime and its endpoint in the console, the `deep-task-planner-agentcore-ui` Lambda and its role, then the S3 bucket and the runtime's execution role.
 
 ## Payloads
 
